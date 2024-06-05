@@ -1,146 +1,239 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'htp_main_page.dart'; // htp_main_page.dart 파일을 임포트합니다.
 
-class HTPMainPage extends StatelessWidget {
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Mindcare Diary',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: DiaryPage(),
+    );
+  }
+}
+
+class DiaryPage extends StatefulWidget {
+  @override
+  _DiaryPageState createState() => _DiaryPageState();
+}
+
+class _DiaryPageState extends State<DiaryPage> {
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  String _response = '오늘은 무슨 일이 있었나요?';
+
+  Future<void> _getResponse(String input) async {
+    print("Requesting with input: $input"); // 로그 추가
+    try {
+      final response = await http.get(Uri.parse('http://127.0.0.1:8000/api/chatbot_diary/chatbot/?s=$input')); // ip주소 수정
+      print("Response status: ${response.statusCode}"); // 로그 추가
+      print("Response body: ${response.body}"); // 로그 추가
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _response = json.decode(response.body)['answer'];
+        });
+      } else {
+        setState(() {
+          _response = 'Error: Unable to get response from server';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _response = 'Error: $e';
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(() {
+      if (!_focusNode.hasFocus) {
+        _controller.clear();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/main_page.png'),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: Column(
-          children: [
-            AppBarWidget(),
-            Expanded(child: HTPContent()),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class AppBarWidget extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.transparent,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            icon: Icon(Icons.menu, color: Colors.white),
+      appBar: AppBar(
+        backgroundColor: Color(0xff110f12),
+        iconTheme: IconThemeData(color: Colors.white),
+        actions: [
+          TextButton(
             onPressed: () {},
-          ),
-          Row(
-            children: [
-              IconButton(
-                icon: Image.asset('assets/images/home_icon.png'),
-                onPressed: () {},
-              ),
-              IconButton(
-                icon: Image.asset('assets/images/mypage_icon.png'),
-                onPressed: () {},
-              ),
-              IconButton(
-                icon: Image.asset('assets/images/logout_icon.png'),
-                onPressed: () {},
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class HTPContent extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'HTP 검사',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
+            child: Text(
+              'Logout',
+              style: TextStyle(color: Colors.white),
             ),
           ),
-          SizedBox(height: 16),
-          Row(
-            children: [
-              Image.asset(
-                'assets/images/rabbit_icon.png',
-                width: 48,
-                height: 48,
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'HTP 검사란?\n\n벅(Buck, 1948)이 고안한 투사적 그림검사로서 집, 나무, 사람을 각각 그리게 하여 '
-                      '내담자의 성격, 행동 양식 및 대인관계를 파악할 수 있습니다. 피험자의 성격적 특징뿐만 아니라 지적 수준을 평가하고 '
-                      '또한 정신장애 및 신경증의 부분적 양상을 파악하는데 널리 사용되기도 합니다.',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              DrawingCard(imagePath: 'assets/images/drawing1.png'),
-              DrawingCard(imagePath: 'assets/images/drawing2.png'),
-              DrawingCard(imagePath: 'assets/images/drawing3.png'),
-            ],
-          ),
-          SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              ElevatedButton(
-                onPressed: () {},
-                child: Text('메인 페이지로'),
-              ),
-              ElevatedButton(
-                onPressed: () {},
-                child: Text('다음'),
-              ),
-            ],
+          IconButton(
+            icon: Icon(Icons.arrow_forward),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => HTPMainPage()),
+              );
+            },
           ),
         ],
       ),
-    );
-  }
-}
-
-class DrawingCard extends StatelessWidget {
-  final String imagePath;
-
-  DrawingCard({required this.imagePath});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Image.asset(
-          imagePath,
-          width: 100,
-          height: 100,
+      drawer: Drawer(
+        child: Container(
+          color: Color(0xff110f12),
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: <Widget>[
+              DrawerHeader(
+                decoration: BoxDecoration(),
+                child: Text(
+                  'Menu',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.home, color: Colors.white),
+                title: Text('Home', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  // 홈 메뉴 클릭 시 수행할 작업
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.person, color: Colors.white),
+                title: Text('Profile', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  // 프로필 메뉴 클릭 시 수행할 작업
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.settings, color: Colors.white),
+                title: Text('Settings', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  // 설정 메뉴 클릭 시 수행할 작업
+                },
+              ),
+            ],
+          ),
         ),
+      ),
+      body: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage('assets/main_page.jpg'),
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          Center(
+            child: Container(
+              width: 1000,
+              height: 700,
+              padding: const EdgeInsets.all(16.0),
+              decoration: BoxDecoration(
+                color: Colors.white70.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Image.asset(
+                        'assets/normal_rabbit.png',
+                        width: 50,
+                        height: 50,
+                      ),
+                      SizedBox(width: 10),
+                      Container(
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white70,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _response,
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 400,
+                          padding: EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white70,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: TextFormField(
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            maxLines: null,
+                            expands: true,
+                            textAlignVertical: TextAlignVertical.top,
+                            decoration: InputDecoration(
+                              border: InputBorder.none,
+                              hintText: '오늘의 감정을 여기에 적어주세요...',
+                              hintStyle: TextStyle(
+                                color: Colors.black54,
+                              ),
+                            ),
+                            onFieldSubmitted: (value) {
+                              if (value.isNotEmpty) {
+                                _getResponse(value);
+                                _controller.clear();
+                                _focusNode.requestFocus();
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      Column(
+                        children: [
+                          ElevatedButton(
+                            onPressed: () {
+                              if (_controller.text.isNotEmpty) {
+                                _getResponse(_controller.text);
+                                _controller.clear();
+                                _focusNode.requestFocus();
+                              }
+                            },
+                            child: Text('저장'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
