@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart'; // 색상 선택기 패키지 임포트
-import 'dart:ui' as ui; // dart:ui 패키지 임포트
-import 'main.dart'; // main.dart 파일을 임포트합니다.
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'dart:ui' as ui;
+import 'main.dart';
 
 class HTPDrawingPage extends StatefulWidget {
   @override
@@ -10,6 +10,7 @@ class HTPDrawingPage extends StatefulWidget {
 
 class _HTPDrawingPageState extends State<HTPDrawingPage> {
   double _brushSize = 5.0;
+  double _eraserSize = 5.0;
   Color _color = Colors.black;
   List<DrawingPoints> _points = [];
   bool _isErasing = false;
@@ -34,6 +35,12 @@ class _HTPDrawingPageState extends State<HTPDrawingPage> {
     });
   }
 
+  void _changeEraserSize(double size) {
+    setState(() {
+      _eraserSize = size;
+    });
+  }
+
   void _nextStep() {
     if (_step < 2) {
       setState(() {
@@ -41,10 +48,9 @@ class _HTPDrawingPageState extends State<HTPDrawingPage> {
         _points.clear();
       });
     } else {
-      // 모든 단계가 완료되었을 때의 처리
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => NextPage()), // 다음 페이지로 이동
+        MaterialPageRoute(builder: (context) => NextPage()),
       );
     }
   }
@@ -59,6 +65,35 @@ class _HTPDrawingPageState extends State<HTPDrawingPage> {
     setState(() {
       _isErasing = true;
     });
+  }
+
+  void _confirmCancel() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('HTP 검사를 종료하시겠습니까?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => MyApp()),
+                      (Route<dynamic> route) => false,
+                );
+              },
+              child: Text('종료'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('취소'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -111,18 +146,19 @@ class _HTPDrawingPageState extends State<HTPDrawingPage> {
                   child: Stack(
                     children: [
                       Container(
+                        margin: EdgeInsets.only(right: 200),
                         color: Colors.white,
                         child: GestureDetector(
                           onPanUpdate: (details) {
                             setState(() {
                               RenderBox renderBox = context.findRenderObject() as RenderBox;
                               _points.add(DrawingPoints(
-                                points: renderBox.globalToLocal(details.globalPosition),
+                                points: renderBox.globalToLocal(details.localPosition),
                                 paint: Paint()
                                   ..color = _isErasing ? Colors.white : _color
                                   ..strokeCap = StrokeCap.round
                                   ..isAntiAlias = true
-                                  ..strokeWidth = _brushSize,
+                                  ..strokeWidth = _isErasing ? _eraserSize : _brushSize,
                               ));
                             });
                           },
@@ -139,6 +175,7 @@ class _HTPDrawingPageState extends State<HTPDrawingPage> {
                         top: 0,
                         right: 0,
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
@@ -184,10 +221,31 @@ class _HTPDrawingPageState extends State<HTPDrawingPage> {
                             ),
                             Row(
                               children: [
-                                Text("Eraser: "),
+                                Text("Eraser Size: "),
+                                Slider(
+                                  value: _eraserSize,
+                                  min: 1.0,
+                                  max: 20.0,
+                                  onChanged: (value) {
+                                    _changeEraserSize(value);
+                                  },
+                                ),
                                 IconButton(
                                   icon: Icon(Icons.brush),
                                   onPressed: _enableEraser,
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                Text("Pen: "),
+                                IconButton(
+                                  icon: Icon(Icons.create),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isErasing = false;
+                                    });
+                                  },
                                 ),
                               ],
                             ),
@@ -200,13 +258,21 @@ class _HTPDrawingPageState extends State<HTPDrawingPage> {
                         child: Column(
                           children: [
                             ElevatedButton(
-                              onPressed: _clearDrawing,
+                              onPressed: _confirmCancel,
                               child: Text('취소'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
                             ),
                             SizedBox(height: 8),
                             ElevatedButton(
                               onPressed: _nextStep,
                               child: Text('다음'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                              ),
                             ),
                           ],
                         ),
@@ -234,7 +300,7 @@ class DrawingPainter extends CustomPainter {
       if (pointsList[i].points != Offset.zero && pointsList[i + 1].points != Offset.zero) {
         canvas.drawLine(pointsList[i].points, pointsList[i + 1].points, pointsList[i].paint);
       } else if (pointsList[i].points != Offset.zero && pointsList[i + 1].points == Offset.zero) {
-        canvas.drawPoints(ui.PointMode.points, [pointsList[i].points], pointsList[i].paint); // ui.PointMode 사용
+        canvas.drawPoints(ui.PointMode.points, [pointsList[i].points], pointsList[i].paint);
       }
     }
   }
@@ -283,7 +349,6 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize => Size.fromHeight(kToolbarHeight);
 }
-
 class CustomDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
