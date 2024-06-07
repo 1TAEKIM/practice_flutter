@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'dart:ui' as ui;
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:mindcare_flutter/htp_api_service.dart';  // 파일 경로 수정
+import 'package:path_provider/path_provider.dart';  // 추가된 패키지
 import 'main.dart';
+import 'htp_result_page.dart';  // 결과 페이지 파일 경로 추가
 
 class HTPDrawingPage extends StatefulWidget {
   @override
@@ -9,12 +15,17 @@ class HTPDrawingPage extends StatefulWidget {
 }
 
 class _HTPDrawingPageState extends State<HTPDrawingPage> {
+  final GlobalKey _globalKey = GlobalKey();  // 추가된 부분
   double _brushSize = 5.0;
   double _eraserSize = 5.0;
   Color _color = Colors.black;
   List<DrawingPoints> _points = [];
   bool _isErasing = false;
   int _step = 0;
+  File? _image;
+  final picker = ImagePicker();
+  String _result = '';
+  int? _drawingId;  // 추가된 부분
 
   final List<String> _stepsText = [
     "집을 그려주세요",
@@ -41,19 +52,44 @@ class _HTPDrawingPageState extends State<HTPDrawingPage> {
     });
   }
 
-  void _nextStep() {
+  Future<void> _nextStep() async {
     if (_step < 2) {
       setState(() {
         _step++;
         _points.clear();
       });
     } else {
+      await _saveToFile();
+      if (_image != null) {
+        var response = await ApiService.uploadDrawing(_image!, _stepsText[_step], 'your_token');
+        setState(() {
+          _drawingId = response['id'];  // 수정된 부분
+          _result = 'Uploaded. Ready for diagnosis.';
+        });
+      }
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => NextPage()),
+        MaterialPageRoute(builder: (context) => ResultPage(result: _result, imageUrl: _image?.path ?? '')),
       );
     }
   }
+
+  Future<void> _saveToFile() async {
+    try {
+      await Future.delayed(Duration(milliseconds: 100));  // RepaintBoundary가 페인팅될 시간을 줌
+      final boundary = _globalKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final buffer = byteData!.buffer.asUint8List();
+
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/drawing_${DateTime.now().millisecondsSinceEpoch}.png');
+      _image = await file.writeAsBytes(buffer);
+    } catch (e) {
+      print("Error in _saveToFile: $e");
+    }
+  }
+
 
   void _clearDrawing() {
     setState(() {
@@ -94,6 +130,21 @@ class _HTPDrawingPageState extends State<HTPDrawingPage> {
         );
       },
     );
+  }
+
+  Future<void> _diagnose() async {
+    if (_drawingId != null) {
+      try {
+        var response = await ApiService.diagnoseDrawing(_drawingId!);
+        setState(() {
+          _result = response['result'];
+        });
+      } catch (e) {
+        print(e);
+      }
+    } else {
+      print('No drawing to diagnose.');
+    }
   }
 
   @override
@@ -143,141 +194,144 @@ class _HTPDrawingPageState extends State<HTPDrawingPage> {
                 ),
                 SizedBox(height: 16),
                 Expanded(
-                  child: Stack(
-                    children: [
-                      Container(
-                        margin: EdgeInsets.only(right: 200),
-                        color: Colors.white,
-                        child: GestureDetector(
-                          onPanUpdate: (details) {
-                            setState(() {
-                              RenderBox renderBox = context.findRenderObject() as RenderBox;
-                              _points.add(DrawingPoints(
-                                points: renderBox.globalToLocal(details.localPosition),
-                                paint: Paint()
-                                  ..color = _isErasing ? Colors.white : _color
-                                  ..strokeCap = StrokeCap.round
-                                  ..isAntiAlias = true
-                                  ..strokeWidth = _isErasing ? _eraserSize : _brushSize,
-                              ));
-                            });
-                          },
-                          onPanEnd: (details) {
-                            _points.add(DrawingPoints(points: Offset.zero, paint: Paint()..color = Colors.transparent));
-                          },
-                          child: CustomPaint(
-                            size: Size.infinite,
-                            painter: DrawingPainter(pointsList: _points),
+                  child: RepaintBoundary(
+                    key: _globalKey,  // 수정된 부분
+                    child: Stack(
+                      children: [
+                        Container(
+                          margin: EdgeInsets.only(right: 200),
+                          color: Colors.white,
+                          child: GestureDetector(
+                            onPanUpdate: (details) {
+                              setState(() {
+                                RenderBox renderBox = context.findRenderObject() as RenderBox;
+                                _points.add(DrawingPoints(
+                                  points: renderBox.globalToLocal(details.localPosition),
+                                  paint: Paint()
+                                    ..color = _isErasing ? Colors.white : _color
+                                    ..strokeCap = StrokeCap.round
+                                    ..isAntiAlias = true
+                                    ..strokeWidth = _isErasing ? _eraserSize : _brushSize,
+                                ));
+                              });
+                            },
+                            onPanEnd: (details) {
+                              _points.add(DrawingPoints(points: Offset.zero, paint: Paint()..color = Colors.transparent));
+                            },
+                            child: CustomPaint(
+                              size: Size.infinite,
+                              painter: DrawingPainter(pointsList: _points),
+                            ),
                           ),
                         ),
-                      ),
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text("Brush Size: "),
-                                Slider(
-                                  value: _brushSize,
-                                  min: 1.0,
-                                  max: 20.0,
-                                  onChanged: (value) {
-                                    _changeBrushSize(value);
-                                  },
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                Text("Color: "),
-                                GestureDetector(
-                                  onTap: () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (context) => AlertDialog(
-                                        title: Text("Select Color"),
-                                        content: SingleChildScrollView(
-                                          child: BlockPicker(
-                                            pickerColor: _color,
-                                            onColorChanged: (color) {
-                                              _changeColor(color);
-                                              Navigator.of(context).pop();
-                                            },
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text("Brush Size: "),
+                                  Slider(
+                                    value: _brushSize,
+                                    min: 1.0,
+                                    max: 20.0,
+                                    onChanged: (value) {
+                                      _changeBrushSize(value);
+                                    },
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  Text("Color: "),
+                                  GestureDetector(
+                                    onTap: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          title: Text("Select Color"),
+                                          content: SingleChildScrollView(
+                                            child: BlockPicker(
+                                              pickerColor: _color,
+                                              onColorChanged: (color) {
+                                                _changeColor(color);
+                                                Navigator.of(context).pop();
+                                              },
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    );
-                                  },
-                                  child: Container(
-                                    width: 24,
-                                    height: 24,
-                                    color: _color,
+                                      );
+                                    },
+                                    child: Container(
+                                      width: 24,
+                                      height: 24,
+                                      color: _color,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                Text("Eraser Size: "),
-                                Slider(
-                                  value: _eraserSize,
-                                  min: 1.0,
-                                  max: 20.0,
-                                  onChanged: (value) {
-                                    _changeEraserSize(value);
-                                  },
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.brush),
-                                  onPressed: _enableEraser,
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                Text("Pen: "),
-                                IconButton(
-                                  icon: Icon(Icons.create),
-                                  onPressed: () {
-                                    setState(() {
-                                      _isErasing = false;
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 16,
-                        right: 16,
-                        child: Column(
-                          children: [
-                            ElevatedButton(
-                              onPressed: _confirmCancel,
-                              child: Text('취소'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
+                                ],
                               ),
-                            ),
-                            SizedBox(height: 8),
-                            ElevatedButton(
-                              onPressed: _nextStep,
-                              child: Text('다음'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                foregroundColor: Colors.white,
+                              Row(
+                                children: [
+                                  Text("Eraser Size: "),
+                                  Slider(
+                                    value: _eraserSize,
+                                    min: 1.0,
+                                    max: 20.0,
+                                    onChanged: (value) {
+                                      _changeEraserSize(value);
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: Icon(Icons.brush),
+                                    onPressed: _enableEraser,
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
+                              Row(
+                                children: [
+                                  Text("Pen: "),
+                                  IconButton(
+                                    icon: Icon(Icons.create),
+                                    onPressed: () {
+                                      setState(() {
+                                        _isErasing = false;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        Positioned(
+                          bottom: 16,
+                          right: 16,
+                          child: Column(
+                            children: [
+                              ElevatedButton(
+                                onPressed: _confirmCancel,
+                                child: Text('취소'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              ElevatedButton(
+                                onPressed: _nextStep,
+                                child: Text('다음'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -306,9 +360,7 @@ class DrawingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
-  }
+  bool shouldRepaint(DrawingPainter oldDelegate) => true;
 }
 
 class DrawingPoints {
@@ -316,16 +368,6 @@ class DrawingPoints {
   Offset points;
 
   DrawingPoints({required this.points, required this.paint});
-}
-
-class NextPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: CustomAppBar(),
-      body: Center(child: Text("Next Page")),
-    );
-  }
 }
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -349,6 +391,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize => Size.fromHeight(kToolbarHeight);
 }
+
 class CustomDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
